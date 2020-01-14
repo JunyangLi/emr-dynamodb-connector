@@ -59,6 +59,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.dynamodb.DynamoDBFibonacciRetryer.RetryResult;
 import org.apache.hadoop.dynamodb.filter.DynamoDBQueryFilter;
+import org.apache.hadoop.dynamodb.util.ReservedWordChecker;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.joda.time.Duration;
@@ -158,8 +159,22 @@ public class DynamoDBClient {
         .withReturnConsumedCapacity(ReturnConsumedCapacity.TOTAL);
 
     if (!attributes.isEmpty()) {
-      final String projection = StringUtils.join(attributes.toArray(), ",");
+      Map<String, String> expressionAttributeNames = new HashMap<>();
+      List<String> projections = new ArrayList<>();
+      for (String attribute : attributes) {
+        if (ReservedWordChecker.isReservedWord(attribute)) {
+          final String expressionAttributeName = ReservedWordChecker.escapeReservedWord(tableName, attribute);
+          expressionAttributeNames.put(expressionAttributeName, attribute);
+          projections.add(expressionAttributeName);
+        } else {
+          projections.add(attribute);
+        }
+      }
+      final String projection = StringUtils.join(projections, ",");
       scanRequest.setProjectionExpression(projection);
+      if (!expressionAttributeNames.isEmpty()) {
+        scanRequest.setExpressionAttributeNames(expressionAttributeNames);
+      }
     }
 
     if (dynamoDBQueryFilter != null) {
